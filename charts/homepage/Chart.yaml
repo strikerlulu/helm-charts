@@ -2,7 +2,7 @@ apiVersion: v2
 description: Chart for Homepage
 icon: https://github.com/gethomepage/homepage/blob/main/public/mstile-150x150.png
 name: homepage
-version: 2.2.0
+version: 2.2.1
 appVersion: v1.2.0
 sources:
   - https://github.com/strikerlulu/helm-charts/tree/main/charts/homepage
