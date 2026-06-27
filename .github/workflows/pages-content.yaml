@@ -1,0 +1,45 @@
+name: Update Pages Content
+
+on:
+  push:
+    branches:
+      - main
+
+permissions:
+  contents: write
+
+jobs:
+  sync-pages:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Configure Git
+        run: |
+          git config user.name "$GITHUB_ACTOR"
+          git config user.email "$GITHUB_ACTOR@users.noreply.github.com"
+      - name: Prepare content
+        run: |
+          mkdir -p /tmp/site
+          cp -a docs/. /tmp/site/
+      - name: Checkout gh-pages
+        run: |
+          if git ls-remote --exit-code --heads origin gh-pages >/dev/null 2>&1; then
+            git fetch origin gh-pages:gh-pages
+            git checkout gh-pages
+          else
+            git checkout -b gh-pages
+            git rm -rf . || true
+          fi
+      - name: Copy files
+        run: |
+          cp -a /tmp/site/. ./
+          git add -A
+          if git diff --cached --quiet; then
+            echo "No site changes"
+          else
+            git commit -m "Update site content"
+            git push origin gh-pages
+          fi

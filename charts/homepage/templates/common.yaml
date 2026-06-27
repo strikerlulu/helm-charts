@@ -1,0 +1,152 @@
+{{- include "bjw-s.common.loader.init" . }}
+
+{{- define "app-template.hardcodedValues" -}}
+
+# Set the nameOverride based on the release name if no override has been set
+{{ if not .Values.global.nameOverride }}
+global:
+  nameOverride: "{{ .Release.Name }}"
+{{ end }}
+
+{{- end -}}
+{{- $_ := mergeOverwrite .Values (include "app-template.hardcodedValues" . | fromYaml) -}}
+
+{{- if .Values.enableRbac -}}
+  {{- $_ := set .Values.serviceAccount "create" true -}}
+  {{- $_ := set .Values.serviceAccount "name" "homepage" -}}
+{{- end -}}
+
+{{- if .Values.serviceAccount.create -}}
+  {{- $_ := set .Values "serviceAccount" (dict "create" true "name" (default (include "bjw-s.common.lib.chart.names.fullname" .) .Values.serviceAccount.name)) -}}
+{{- end -}}
+
+{{- $_ := set .Values "serviceAccount" (dict "create" true "name" "homepage") -}}
+
+{{- if not (hasKey .Values "controllers") -}}
+  {{- $_ := set .Values "controllers" dict -}}
+{{- end -}}
+{{- if not (hasKey .Values.controllers "main") -}}
+  {{- $_ := set .Values.controllers "main" dict -}}
+{{- end -}}
+{{- $mainController := get .Values.controllers "main" -}}
+
+{{- if not (hasKey $mainController "pod") -}}
+  {{- $_ := set $mainController "pod" dict -}}
+{{- end -}}
+{{- $mainPod := get $mainController "pod" -}}
+{{- $_ := set $mainPod "serviceAccountName" "homepage" -}}
+{{- $_ := set $mainPod "automountServiceAccountToken" true -}}
+
+{{/* Compatibility layer for bjw-s common v5 controllers schema */}}
+{{- if not (hasKey $mainController "type") -}}
+  {{- $_ := set $mainController "type" "deployment" -}}
+{{- end -}}
+{{- if hasKey .Values "controller" -}}
+  {{- if and (hasKey .Values.controller "strategy") (not (hasKey $mainController "strategy")) -}}
+    {{- $_ := set $mainController "strategy" .Values.controller.strategy -}}
+  {{- end -}}
+  {{- if and (hasKey .Values.controller "rollingUpdate") (not (hasKey $mainController "rollingUpdate")) -}}
+    {{- $_ := set $mainController "rollingUpdate" .Values.controller.rollingUpdate -}}
+  {{- end -}}
+{{- end -}}
+{{- if not (hasKey $mainController "containers") -}}
+  {{- $_ := set $mainController "containers" dict -}}
+{{- end -}}
+{{- $containers := get $mainController "containers" -}}
+{{- if not (hasKey $containers "main") -}}
+  {{- $_ := set $containers "main" dict -}}
+{{- end -}}
+{{- $mainContainer := get $containers "main" -}}
+{{- if not (hasKey $mainContainer "enabled") -}}
+  {{- $_ := set $mainContainer "enabled" true -}}
+{{- end -}}
+{{- if and (hasKey .Values "image") (not (hasKey $mainContainer "image")) -}}
+  {{- $_ := set $mainContainer "image" .Values.image -}}
+{{- end -}}
+{{- if hasKey $mainContainer "image" -}}
+  {{- if and (not (hasKey $mainContainer.image "tag")) (not (hasKey $mainContainer.image "digest")) -}}
+    {{- $_ := set $mainContainer.image "tag" .Chart.AppVersion -}}
+  {{- end -}}
+{{- end -}}
+{{- if and (hasKey .Values "env") (not (hasKey $mainContainer "env")) -}}
+  {{- $_ := set $mainContainer "env" .Values.env -}}
+{{- end -}}
+{{- if .Values.env -}}
+  {{- $_ := set $mainContainer "env" .Values.env -}}
+{{- end -}}
+{{- if and (hasKey .Values "envFrom") (not (hasKey $mainContainer "envFrom")) -}}
+  {{- $_ := set $mainContainer "envFrom" .Values.envFrom -}}
+{{- end -}}
+{{- if and (hasKey .Values "resources") (not (hasKey $mainContainer "resources")) -}}
+  {{- $_ := set $mainContainer "resources" .Values.resources -}}
+{{- end -}}
+{{- if and (hasKey .Values "service") (hasKey .Values.service "main") -}}
+  {{- if not (hasKey .Values.service.main "controller") -}}
+    {{- $_ := set .Values.service.main "controller" "main" -}}
+  {{- end -}}
+{{- end -}}
+
+{{/* Backward compatibility for legacy top-level DNS values */}}
+{{- if not (hasKey .Values "defaultPodOptions") -}}
+  {{- $_ := set .Values "defaultPodOptions" dict -}}
+{{- end -}}
+{{- if and (hasKey .Values "dnsPolicy") (not (hasKey .Values.defaultPodOptions "dnsPolicy")) -}}
+  {{- $_ := set .Values.defaultPodOptions "dnsPolicy" .Values.dnsPolicy -}}
+{{- end -}}
+{{- if and (hasKey .Values "dnsConfig") (not (hasKey .Values.defaultPodOptions "dnsConfig")) -}}
+  {{- $_ := set .Values.defaultPodOptions "dnsConfig" .Values.dnsConfig -}}
+{{- end -}}
+
+{{/* Append the configMap volume to the volumes */}}
+{{- define "homepage.configVolume" -}}
+enabled: "true"
+type: "custom"
+volumeSpec:
+  configMap:
+    name: {{ (default (include "bjw-s.common.lib.chart.names.fullname" .) .Values.config.useExistingConfigMap) }}
+advancedMounts:
+  main:
+    main:
+      - path: /app/config/bookmarks.yaml
+        subPath: bookmarks.yaml
+      - path: /app/config/docker.yaml
+        subPath: docker.yaml
+      - path: /app/config/kubernetes.yaml
+        subPath: kubernetes.yaml
+      - path: /app/config/services.yaml
+        subPath: services.yaml
+      - path: /app/config/settings.yaml
+        subPath: settings.yaml
+      - path: /app/config/widgets.yaml
+        subPath: widgets.yaml
+{{- end -}}
+{{/* Append the base config dir, to enable custom css/js to be copied at startup */}}
+{{- define "homepage.baseConfigVolume" -}}
+enabled: "true"
+type: "custom"
+volumeSpec:
+  emptyDir: {}
+globalMounts:
+  - path: /app/config
+{{- end -}}
+
+{{ $checkSum := ( print .Values | sha256sum ) -}}
+
+{{- $_ := set .Values.persistence "homepage-base-config" (include "homepage.baseConfigVolume" . | fromYaml) -}}
+{{- $_ := set .Values.persistence "homepage-config" (include "homepage.configVolume" . | fromYaml) -}}
+
+{{- if not (hasKey $mainPod "annotations") -}}
+  {{- $_ := set $mainPod "annotations" dict -}}
+{{- end -}}
+{{- $_ := set (get $mainPod "annotations") "values-checksum" $checkSum -}}
+
+{{- if not (hasKey .Values "podAnnotations") -}}
+  {{- $_ := set .Values "podAnnotations" dict -}}
+{{- end -}}
+{{- $_ := set .Values.podAnnotations "values-checksum" $checkSum -}}
+
+{{ include "homepage.configmap" . }}
+{{ include "homepage.rbac" . }}
+
+{{/* Render the templates */}}
+{{ include "bjw-s.common.loader.generate" . }}

@@ -1,0 +1,19 @@
+apiVersion: v2
+description: Chart for Homepage
+icon: https://github.com/gethomepage/homepage/blob/main/public/mstile-150x150.png
+name: homepage
+version: 2.2.0
+appVersion: v1.2.0
+sources:
+  - https://github.com/strikerlulu/helm-charts/tree/main/charts/homepage
+  - https://github.com/gethomepage/homepage/
+maintainers:
+  - name: strikerlulu
+dependencies:
+  - name: common
+    repository: https://bjw-s-labs.github.io/helm-charts
+    version: 5.0.1
+annotations:
+  artifacthub.io/changes: |-
+    - kind: changed
+      description: Updated bjw-s common dependency to 5.0.1
